@@ -99,6 +99,8 @@ def add_argument(*args, **kwargs):
 
 
 if __name__ == '__main__':
+
+    print("MODEL_NAME env:", os.getenv("MODEL_NAME"))
     
     add_argument('--zotero_id', type=str, help='Zotero user ID')
     add_argument('--zotero_key', type=str, help='Zotero API key')
