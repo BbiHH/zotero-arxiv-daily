@@ -170,8 +170,18 @@ class ArxivPaper:
             if match:
                 conclusion = match.group(0)
         llm = get_llm()
-        prompt = """Given the title, abstract, introduction and the conclusion (if any) of a paper in latex format, generate a one-sentence TLDR summary in __LANG__:
-        
+        prompt = """Given the title, abstract, introduction, and conclusion (if any) of a research paper written in LaTeX format,
+                    write a natural, easy-to-understand, and information-rich TLDR.
+                    
+                    The TLDR should consist of three short, connected sentences:
+                    1) Explain what research problem the paper addresses,
+                    2) Describe what method or approach the paper proposes,
+                    3) Summarize the key results or experimental findings.
+                    
+                    Keep it short (about 3 sentences), clear, and written in natural English, suitable for a daily research digest.
+                    
+                    Here is the input paper content:
+                    
         \\title{__TITLE__}
         \\begin{abstract}__ABSTRACT__\\end{abstract}
         __INTRODUCTION__
@@ -193,7 +203,7 @@ class ArxivPaper:
             messages=[
                 {
                     "role": "system",
-                    "content": "You are an assistant who perfectly summarizes scientific paper, and gives the core idea of the paper to the user.",
+                    "content": "You are an expert research assistant who summarizes cutting-edge research papers in Artificial Intelligence, Large Language Models, Multimodal Learning, and Reinforcement Learning. Your goal is to create concise, informative, and fluent one-paragraph TLDRs that help readers quickly grasp  the core idea of each paper. Focus on clarity, completeness, and accurate representation of the ideas. Avoid generic statements and highlight the novelty in plain.",
                 },
                 {"role": "user", "content": prompt},
             ]
