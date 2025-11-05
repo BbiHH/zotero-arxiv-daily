@@ -33,6 +33,7 @@ class LLM:
                     if attempt == max_retries - 1:
                         raise
                     sleep(3)
+            print("Full LLM response:", response)
             return response.choices[0].message.content
         else:
             response = self.llm.create_chat_completion(messages=messages,temperature=0)
