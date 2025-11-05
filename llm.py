@@ -21,6 +21,7 @@ class LLM:
         self.lang = lang
 
     def generate(self, messages: list[dict]) -> str:
+        logger.info(f"Using LLM type: {type(self.llm)}  (model={self.model})")
         if isinstance(self.llm, OpenAI):
             max_retries = 3
             for attempt in range(max_retries):
