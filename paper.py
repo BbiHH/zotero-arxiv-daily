@@ -173,15 +173,14 @@ class ArxivPaper:
             if match:
                 conclusion = match.group(0)
         llm = get_llm()
-        prompt = """Given the title, abstract, introduction, and conclusion (if any) of a research paper written in LaTeX format,
-                    write a natural, easy-to-understand, and information-rich TLDR.
-                    
-                    The TLDR should consist of three short, connected sentences:
-                    1) Explain what research problem the paper addresses,
-                    2) Describe what method or approach the paper proposes,
-                    3) Summarize the key results or experimental findings.
-                    
-                    Keep it short (about 3 sentences), clear, and written in natural English, suitable for a daily research digest.
+        prompt = """Given the title, abstract, introduction, and conclusion (if any) of a research paper written in LaTeX format, please do the following:
+
+                    Output the full English abstract exactly as it appears in the paper, and provide a complete and accurate Chinese translation of the abstract.
+                    Write a concise Chinese TLDR consisting of exactly three sentences:
+                        - Sentence 1: Explain what research problem the paper addresses.
+                        - Sentence 2: Describe what method or approach the paper proposes.
+                        - Sentence 3: Summarize the main experimental results or findings.
+                    The TLDR should be written in clear, natural Chinese, concise but information-rich, suitable for a daily research digest.
                     
                     Here is the input paper content:
                     
