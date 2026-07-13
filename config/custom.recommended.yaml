@@ -1,0 +1,136 @@
+zotero:
+  user_id: ${oc.env:ZOTERO_ID}
+  api_key: ${oc.env:ZOTERO_KEY}
+
+  # These exact patterns include papers placed directly in the four root collections.
+  include_path:
+    - "01-ToRead"
+    - "02-RecentFocus"
+    - "04-DeepRead"
+    - "05-Important"
+
+  ignore_path:
+    - "00-Inbox"
+    - "03-Reviewed"
+    - "99-Archive"
+
+  collection_priority:
+    - pattern: "02-RecentFocus"
+      weight: 5
+    - pattern: "05-Important"
+      weight: 4
+    - pattern: "04-DeepRead"
+      weight: 3
+    - pattern: "01-ToRead"
+      weight: 1
+
+email:
+  sender: ${oc.env:SENDER}
+  receiver: ${oc.env:RECEIVER}
+  smtp_server: smtp.163.com
+  smtp_port: 465
+  sender_password: ${oc.env:SENDER_PASSWORD}
+
+llm:
+  api:
+    key: ${oc.env:OPENAI_API_KEY}
+    base_url: ${oc.env:OPENAI_API_BASE}
+
+  generation_kwargs:
+    model: deepseek-v4-flash
+    extra_body:
+      thinking:
+        type: disabled
+
+  tldr:
+    max_attempts: 3
+    retry_delay_seconds: 2
+    generation_kwargs:
+      temperature: 0
+      max_tokens: 500
+
+  affiliation:
+    max_attempts: 3
+    retry_delay_seconds: 2
+    generation_kwargs:
+      temperature: 0
+      max_tokens: 200
+
+  filter:
+    enabled: true
+    output_paper_num: 25
+    # Keep 5 for the first production validation; raise to 10 after the model
+    # has repeatedly returned complete, valid score objects.
+    batch_size: 5
+    max_attempts: 3
+    retry_delay_seconds: 2
+    score_step: 5
+    # Set to false only if the configured provider rejects response_format.
+    use_json_mode: true
+    prompt_file: config/prompts/paper_filter.txt
+
+    research_profile: |
+      The core research area is multimodal and large vision-language model
+      reasoning. Give highest priority to Thinking with Images: methods that use
+      images, visual sketches, scene graphs, crops, zooming, generated visual
+      intermediates, or repeated visual inspection as part of the reasoning
+      process. Also prioritize grounded visual reasoning, spatial and relational
+      reasoning, active visual evidence acquisition, visual tool use, multimodal
+      chain-of-thought, test-time computation, self-evolution, and reinforcement
+      learning that directly improves multimodal reasoning.
+
+      Treat generic text-only agents, generic reinforcement learning, broad
+      surveys, and unrelated multimodal applications as expansion topics unless
+      the abstract shows a concrete transfer to visual reasoning.
+
+    screening_requirements: |
+      Score only from the supplied title and abstract. Prioritize papers with a
+      clear research problem, substantive method or system design, meaningful
+      validation, and direct relevance to the research profile. Prefer work that
+      introduces a reusable reasoning mechanism, training method, evaluation
+      insight, or evidence-acquisition strategy. Deprioritize shallow benchmark
+      papers, application-only work, vague incremental improvements, and papers
+      whose claimed relevance is not supported by the abstract. Do not infer
+      author affiliations, institutional prestige, or experimental results that
+      are not explicitly present in the supplied material.
+
+    weights:
+      llm: 0.7
+      embedding: 0.3
+
+    generation_kwargs:
+      temperature: 0
+      max_tokens: 1200
+
+reranker:
+  embedding_cache:
+    enabled: true
+    directory: .cache/zotero-arxiv-daily/embeddings
+
+  local:
+    model: Qwen/Qwen3-Embedding-0.6B
+    query_encode_kwargs:
+      prompt: "Instruct: Given a scientific paper title and abstract, retrieve other scientific papers that are relevant to its research topic, methods, or findings.\nQuery: "
+      normalize_embeddings: true
+    document_encode_kwargs:
+      normalize_embeddings: true
+
+source:
+  arxiv:
+    category:
+      - cs.AI
+      - cs.CV
+      - cs.LG
+      - cs.CL
+    include_cross_list: true
+
+executor:
+  debug: ${oc.decode:${oc.env:DEBUG,false}}
+  # Send a status email even when arXiv has no new papers that day.
+  send_empty: true
+  timezone: Asia/Shanghai
+  markdown_output_dir: outputs
+  max_paper_num: 100
+  source:
+    - arxiv
+  reranker: local
