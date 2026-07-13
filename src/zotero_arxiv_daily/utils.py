@@ -9,6 +9,7 @@ from email.mime.text import MIMEText
 from email.utils import parseaddr, formataddr
 from loguru import logger
 import datetime
+from zoneinfo import ZoneInfo
 from omegaconf import DictConfig
 import pymupdf
 import pymupdf.layout
@@ -139,7 +140,12 @@ def glob_match(path:str, pattern:str) -> bool:
     re_pattern = glob.translate(pattern,recursive=True)
     return re.match(re_pattern, path) is not None
 
-def send_email(config:DictConfig, html:str):
+
+def get_local_date(config: DictConfig) -> datetime.date:
+    timezone_name = config.executor.get("timezone") or "UTC"
+    return datetime.datetime.now(ZoneInfo(timezone_name)).date()
+
+def send_email(config:DictConfig, content:str):
     sender = config.email.sender
     receiver = config.email.receiver
     password = config.email.sender_password
@@ -149,22 +155,31 @@ def send_email(config:DictConfig, html:str):
         name, addr = parseaddr(s)
         return formataddr((Header(name, 'utf-8').encode(), addr))
 
-    msg = MIMEText(html, 'html', 'utf-8')
+    # Markdown is sent as plain text so downstream LLMs receive a clean,
+    # deterministic representation without HTML layout noise.
+    msg = MIMEText(content, 'plain', 'utf-8')
     msg['From'] = _format_addr('Github Action <%s>' % sender)
     msg['To'] = _format_addr('You <%s>' % receiver)
-    today = datetime.datetime.now().strftime('%Y/%m/%d')
+    today = get_local_date(config).strftime('%Y/%m/%d')
     msg['Subject'] = Header(f'Daily arXiv {today}', 'utf-8').encode()
 
+    server = None
     try:
         server = smtplib.SMTP(smtp_server, smtp_port)
         server.starttls()
     except Exception as e:
         logger.debug(f"Failed to use TLS. {e}\nTry to use SSL.")
+        if server is not None:
+            try:
+                server.close()
+            except Exception:
+                pass
         try:
             server = smtplib.SMTP_SSL(smtp_server, smtp_port)
-        except Exception as e:
-            logger.debug(f"Failed to use SSL. {e}\nTry to use plain text.")
-            server = smtplib.SMTP(smtp_server, smtp_port)
+        except Exception as ssl_error:
+            raise RuntimeError(
+                "Unable to establish a secure SMTP connection; refusing plaintext fallback"
+            ) from ssl_error
 
     server.login(sender, password)
     server.sendmail(sender, [receiver], msg.as_string())

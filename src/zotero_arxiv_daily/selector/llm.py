@@ -79,8 +79,10 @@ class LLMPaperSelector:
         self.client = client
 
         self.batch_size = self._positive_int("batch_size")
-        self.max_batches = self._positive_int("max_batches")
         self.output_paper_num = self._positive_int("output_paper_num")
+        self.max_candidates = int(config.executor.max_paper_num)
+        if self.max_candidates <= 0:
+            raise ValueError("executor.max_paper_num must be a positive integer")
         self.max_attempts = self._positive_int("max_attempts")
         self.score_step = self._positive_int("score_step")
         if 100 % self.score_step != 0:
@@ -199,12 +201,11 @@ class LLMPaperSelector:
         if not candidates:
             return []
 
-        max_candidates = self.batch_size * self.max_batches
-        working = list(candidates[:max_candidates])
-        if len(candidates) > max_candidates:
+        working = list(candidates[:self.max_candidates])
+        if len(candidates) > self.max_candidates:
             logger.warning(
-                f"LLM filter can score at most {max_candidates} papers; "
-                f"ignoring {len(candidates) - max_candidates} lower-ranked candidates"
+                f"LLM filter can score at most {self.max_candidates} papers; "
+                f"ignoring {len(candidates) - self.max_candidates} lower-ranked candidates"
             )
 
         percentile_scores = embedding_percentile_scores(len(working))

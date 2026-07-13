@@ -181,8 +181,8 @@ def test_run_end_to_end(config, monkeypatch):
     monkeypatch.setattr("zotero_arxiv_daily.executor.OpenAI", lambda **kw: stub_client)
     monkeypatch.setattr("zotero_arxiv_daily.reranker.api.OpenAI", lambda **kw: stub_client)
     retrieved = [
-        make_sample_paper(title="E2E Paper 1", score=None),
-        make_sample_paper(title="E2E Paper 2", score=None),
+        make_sample_paper(title="E2E Paper 1", score=None, full_text=None),
+        make_sample_paper(title="E2E Paper 2", score=None, full_text=None),
     ]
 
     # Import to register the arxiv retriever
@@ -195,13 +195,18 @@ def test_run_end_to_end(config, monkeypatch):
         "retrieve_papers",
         lambda self: retrieved,
     )
+    enriched = []
+
+    def enrich_selected(self, paper):
+        enriched.append(paper.title)
+        paper.full_text = "Selected paper body"
+        return paper
+
+    monkeypatch.setattr(registered_retrievers["arxiv"], "enrich_paper", enrich_selected)
 
     # 4. Stub SMTP
     sent = []
     monkeypatch.setattr(smtplib, "SMTP", make_stub_smtp(sent))
-
-    # 5. Stub sleep (reranker/retriever)
-    monkeypatch.setattr("zotero_arxiv_daily.retriever.base.sleep", lambda _: None)
 
     # 6. Run
     executor = Executor(config)
@@ -210,10 +215,11 @@ def test_run_end_to_end(config, monkeypatch):
     # Assertions
     assert len(sent) == 1, "Email should have been sent"
     _, _, email_body = sent[0]
-    assert "text/html" in email_body
-    decoded_html = message_from_string(email_body).get_payload(decode=True).decode("utf-8")
-    assert "E2E Paper 1" in decoded_html
-    assert "E2E Paper 2" not in decoded_html
+    assert "text/plain" in email_body
+    decoded_content = message_from_string(email_body).get_payload(decode=True).decode("utf-8")
+    assert "E2E Paper 1" in decoded_content
+    assert "E2E Paper 2" not in decoded_content
+    assert enriched == ["E2E Paper 1"]
 
 
 def test_run_no_papers_send_empty_false(config, monkeypatch):
@@ -244,8 +250,6 @@ def test_run_no_papers_send_empty_false(config, monkeypatch):
 
     sent = []
     monkeypatch.setattr(smtplib, "SMTP", make_stub_smtp(sent))
-    monkeypatch.setattr("zotero_arxiv_daily.retriever.base.sleep", lambda _: None)
-
     executor = Executor(config)
     executor.run()
 
@@ -280,11 +284,24 @@ def test_run_no_papers_send_empty_true(config, monkeypatch):
 
     sent = []
     monkeypatch.setattr(smtplib, "SMTP", make_stub_smtp(sent))
-    monkeypatch.setattr("zotero_arxiv_daily.retriever.base.sleep", lambda _: None)
-
     executor = Executor(config)
     executor.run()
 
     assert len(sent) == 1, "Email should be sent even with no papers when send_empty=true"
     _, _, body = sent[0]
-    assert "text/html" in body
+    assert "text/plain" in body
+
+
+def test_save_markdown_uses_configured_output_directory(config, tmp_path):
+    from omegaconf import open_dict
+
+    with open_dict(config.executor):
+        config.executor.markdown_output_dir = str(tmp_path)
+    executor = Executor(config)
+
+    output = executor.save_markdown("# Digest\n")
+
+    assert output is not None
+    assert output.parent == tmp_path
+    assert output.name.startswith("daily-arxiv-")
+    assert output.read_text(encoding="utf-8") == "# Digest\n"

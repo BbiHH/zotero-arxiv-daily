@@ -130,7 +130,7 @@ def test_send_email_starttls_success(config, monkeypatch):
     assert sender == "test@example.com"
     assert recipients == ["test@example.com"]
     # Body is a full MIME message (base64-encoded). Check the raw MIME string.
-    assert "text/html" in body
+    assert "text/plain" in body
 
 
 def test_send_email_falls_back_to_ssl(config, monkeypatch):
@@ -154,7 +154,7 @@ def test_send_email_falls_back_to_ssl(config, monkeypatch):
     assert len(sent) == 1
 
 
-def test_send_email_falls_back_to_plain(config, monkeypatch):
+def test_send_email_refuses_plaintext_fallback(config, monkeypatch):
     sent = []
     call_count = {"smtp": 0}
 
@@ -182,8 +182,9 @@ def test_send_email_falls_back_to_plain(config, monkeypatch):
 
     monkeypatch.setattr(smtplib, "SMTP", StubSMTP_TLS_Fails)
     monkeypatch.setattr(smtplib, "SMTP_SSL", StubSMTP_SSL_Fails)
-    send_email(config, "<html>plain</html>")
-    assert len(sent) == 1
+    with pytest.raises(RuntimeError, match="refusing plaintext fallback"):
+        send_email(config, "plain")
+    assert sent == []
 
 
 # ---------------------------------------------------------------------------

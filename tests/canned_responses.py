@@ -12,7 +12,7 @@ from zotero_arxiv_daily.protocol import CorpusPaper, Paper
 # OpenAI client stub
 # ---------------------------------------------------------------------------
 
-_AFFILIATION_MARKER = "You are an assistant who perfectly extracts affiliations"
+_AFFILIATION_MARKER = "You extract primary scientific-paper affiliations"
 _AFFILIATION_RESPONSE = '["TsingHua University","Peking University"]'
 _TLDR_RESPONSE = "Hello! How can I assist you today?"
 _PAPER_FILTER_MARKER = "The scores object must contain every supplied ID"
@@ -179,6 +179,7 @@ def make_sample_paper(**overrides) -> Paper:
         authors=["Author A", "Author B", "Author C"],
         abstract="This paper explores a novel approach to widget engineering.",
         url="https://arxiv.org/abs/2026.00001",
+        published_date="2026-07-13",
         pdf_url="https://arxiv.org/pdf/2026.00001",
         full_text="\\begin{document} Some text. \\end{document}",
         tldr=None,

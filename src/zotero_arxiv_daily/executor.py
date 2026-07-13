@@ -8,10 +8,11 @@ import random
 from datetime import datetime
 from .reranker import get_reranker_cls
 from .construct_email import render_email
-from .utils import send_email
+from .utils import get_local_date, send_email
 from openai import OpenAI
 from tqdm import tqdm
 from .selector import LLMPaperSelector
+from pathlib import Path
 
 
 def normalize_path_patterns(patterns: list[str] | ListConfig | None, config_key: str) -> list[str] | None:
@@ -93,6 +94,17 @@ class Executor:
             logger.info(f"Selected {len(corpus)} zotero papers:\n{samples}\n...")
         return corpus
 
+    def save_markdown(self, content: str) -> Path | None:
+        output_dir = self.config.executor.get("markdown_output_dir")
+        if not output_dir:
+            return None
+        output_path = Path(output_dir).expanduser()
+        output_path.mkdir(parents=True, exist_ok=True)
+        file_path = output_path / f"daily-arxiv-{get_local_date(self.config).isoformat()}.md"
+        file_path.write_text(content, encoding="utf-8")
+        logger.info(f"Saved Markdown digest to {file_path}")
+        return file_path
+
     
     def run(self):
         corpus = self.fetch_zotero_corpus()
@@ -118,8 +130,11 @@ class Executor:
             if self.selector is not None:
                 logger.info("Scoring embedding candidates with the LLM filter...")
                 reranked_papers = self.selector.select(reranked_papers)
-            logger.info("Generating TLDR and affiliations...")
+            logger.info("Enriching selected papers and generating TLDR and affiliations...")
             for p in tqdm(reranked_papers):
+                retriever = self.retrievers.get(p.source)
+                if retriever is not None:
+                    retriever.enrich_paper(p)
                 p.generate_tldr(self.openai_client, self.config.llm)
                 p.generate_affiliations(self.openai_client, self.config.llm)
         elif not self.config.executor.send_empty:
@@ -127,5 +142,6 @@ class Executor:
             return
         logger.info("Sending email...")
         email_content = render_email(reranked_papers)
+        self.save_markdown(email_content)
         send_email(self.config, email_content)
         logger.info("Email sent successfully")

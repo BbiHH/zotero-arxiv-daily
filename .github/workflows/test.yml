@@ -15,6 +15,9 @@ jobs:
 
       - name: Setup uv
         uses: astral-sh/setup-uv@v7.1.4
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
 
       - name: Cache Hugging Face models
         uses: actions/cache@v4
@@ -40,3 +43,12 @@ jobs:
           echo "Use custom config: "
           cat config/custom.yaml
           uv run src/zotero_arxiv_daily/main.py
+
+      - name: Upload Markdown digest
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: daily-arxiv-debug-${{ github.run_id }}
+          path: outputs/*.md
+          if-no-files-found: ignore
+          retention-days: 30

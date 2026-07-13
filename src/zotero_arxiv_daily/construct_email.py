@@ -1,131 +1,60 @@
 from .protocol import Paper
-import math
 
 
-framework = """
-<!DOCTYPE HTML>
-<html>
-<head>
-  <style>
-    .star-wrapper {
-      font-size: 1.3em; /* 调整星星大小 */
-      line-height: 1; /* 确保垂直对齐 */
-      display: inline-flex;
-      align-items: center; /* 保持对齐 */
-    }
-    .half-star {
-      display: inline-block;
-      width: 0.5em; /* 半颗星的宽度 */
-      overflow: hidden;
-      white-space: nowrap;
-      vertical-align: middle;
-    }
-    .full-star {
-      vertical-align: middle;
-    }
-  </style>
-</head>
-<body>
+def _limited_names(values: list[str] | None, limit: int, unknown: str) -> str:
+    names = values or []
+    rendered = ", ".join(names[:limit])
+    if len(names) > limit:
+        rendered += ", ..."
+    return rendered or unknown
 
-<div>
-    __CONTENT__
-</div>
 
-<br><br>
-<div>
-To unsubscribe, remove your email in your Github Action setting.
-</div>
+def render_paper_markdown(paper: Paper, index: int) -> str:
+    """Render one paper as stable Markdown suitable for humans and downstream LLMs."""
+    authors = _limited_names(paper.authors, 3, "Unknown Authors")
+    affiliations = _limited_names(paper.affiliations, 3, "Unknown Affiliation")
+    published_date = paper.published_date or "Unknown Date"
+    tldr = paper.tldr or "TLDR 生成失败：本次无法生成可靠的中文总结，请查看英文摘要。"
+    abstract = paper.abstract or "No abstract available."
 
-</body>
-</html>
+    links = []
+    if paper.url:
+        links.append(f"[arXiv]({paper.url})")
+    if paper.pdf_url:
+        links.append(f"[PDF]({paper.pdf_url})")
+    rendered_links = " | ".join(links) or "No link available."
+
+    return f"""## {index}. {paper.title or 'Untitled'}
+
+**作者：** {authors}
+
+**机构：** {affiliations}
+
+**发布日期：** {published_date}
+
+### TLDR
+
+{tldr}
+
+### Abstract
+
+{abstract}
+
+**链接：** {rendered_links}
 """
 
-def get_empty_html():
-  block_template = """
-  <table border="0" cellpadding="0" cellspacing="0" width="100%" style="font-family: Arial, sans-serif; border: 1px solid #ddd; border-radius: 8px; padding: 16px; background-color: #f9f9f9;">
-  <tr>
-    <td style="font-size: 20px; font-weight: bold; color: #333;">
-        No Papers Today. Take a Rest!
-    </td>
-  </tr>
-  </table>
-  """
-  return block_template
 
-def get_block_html(title:str, authors:str, rate:str, tldr:str, pdf_url:str, affiliations:str=None):
-    block_template = """
-    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="font-family: Arial, sans-serif; border: 1px solid #ddd; border-radius: 8px; padding: 16px; background-color: #f9f9f9;">
-    <tr>
-        <td style="font-size: 20px; font-weight: bold; color: #333;">
-            {title}
-        </td>
-    </tr>
-    <tr>
-        <td style="font-size: 14px; color: #666; padding: 8px 0;">
-            {authors}
-            <br>
-            <i>{affiliations}</i>
-        </td>
-    </tr>
-    <tr>
-        <td style="font-size: 14px; color: #333; padding: 8px 0;">
-            <strong>Relevance:</strong> {rate}
-        </td>
-    </tr>
-    <tr>
-        <td style="font-size: 14px; color: #333; padding: 8px 0;">
-            <strong>TLDR:</strong> {tldr}
-        </td>
-    </tr>
+def render_email(papers: list[Paper]) -> str:
+    """Build the email's canonical Markdown/plain-text representation."""
+    if not papers:
+        return "# Daily arXiv Papers\n\nNo Papers Today. Take a Rest!\n"
 
-    <tr>
-        <td style="padding: 8px 0;">
-            <a href="{pdf_url}" style="display: inline-block; text-decoration: none; font-size: 14px; font-weight: bold; color: #fff; background-color: #d9534f; padding: 8px 16px; border-radius: 4px;">PDF</a>
-        </td>
-    </tr>
-</table>
-"""
-    return block_template.format(title=title, authors=authors,rate=rate, tldr=tldr, pdf_url=pdf_url, affiliations=affiliations)
-
-def get_stars(score:float):
-    full_star = '<span class="full-star">⭐</span>'
-    half_star = '<span class="half-star">⭐</span>'
-    low = 6
-    high = 8
-    if score <= low:
-        return ''
-    elif score >= high:
-        return full_star * 5
-    else:
-        interval = (high-low) / 10
-        star_num = math.ceil((score-low) / interval)
-        full_star_num = int(star_num/2)
-        half_star_num = star_num - full_star_num * 2
-        return '<div class="star-wrapper">'+full_star * full_star_num + half_star * half_star_num + '</div>'
-
-
-def render_email(papers:list[Paper]) -> str:
-    parts = []
-    if len(papers) == 0 :
-        return framework.replace('__CONTENT__', get_empty_html())
-    
-    for p in papers:
-        #rate = get_stars(p.score)
-        rate = round(p.score, 1) if p.score is not None else 'Unknown'
-        author_list = [a for a in p.authors]
-        num_authors = len(author_list)
-        if num_authors <= 5:
-            authors = ', '.join(author_list)
-        else:
-            authors = ', '.join(author_list[:3] + ['...'] + author_list[-2:])
-        if p.affiliations is not None:
-            affiliations = p.affiliations[:5]
-            affiliations = ', '.join(affiliations)
-            if len(p.affiliations) > 5:
-                affiliations += ', ...'
-        else:
-            affiliations = 'Unknown Affiliation'
-        parts.append(get_block_html(p.title, authors, rate, p.tldr, p.pdf_url, affiliations))
-
-    content = '<br>' + '</br><br>'.join(parts) + '</br>'
-    return framework.replace('__CONTENT__', content)
+    blocks = [render_paper_markdown(paper, index) for index, paper in enumerate(papers, 1)]
+    content = "\n---\n\n".join(blocks)
+    return (
+        f"# Daily arXiv Papers\n\n"
+        f"今日精选论文：{len(papers)} 篇。\n\n"
+        f"{content}\n\n"
+        "---\n\n"
+        "To unsubscribe, remove your email in your GitHub Action settings.\n"
+    )

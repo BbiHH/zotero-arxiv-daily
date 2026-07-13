@@ -1,6 +1,7 @@
 """Tests for ArxivRetriever."""
 
 import time
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import feedparser
@@ -198,7 +199,6 @@ def test_html_extraction_uses_hard_timeout(monkeypatch):
 
 
 def test_arxiv_retriever(config, mock_feedparser, monkeypatch):
-    monkeypatch.setattr("zotero_arxiv_daily.retriever.base.sleep", lambda _: None)
     monkeypatch.setattr(
         arxiv_retriever,
         "_fetch_rss_feed",
@@ -222,6 +222,7 @@ def test_arxiv_retriever(config, mock_feedparser, monkeypatch):
             title=entry.title,
             authors=[SimpleNamespace(name="Test Author")],
             summary="Test abstract",
+            published=datetime(2026, 7, 13, tzinfo=timezone.utc),
             pdf_url=f"https://arxiv.org/pdf/{pid}",
             entry_id=f"https://arxiv.org/abs/{pid}",
             source_url=lambda pid=pid: f"https://arxiv.org/e-print/{pid}",
@@ -235,16 +236,37 @@ def test_arxiv_retriever(config, mock_feedparser, monkeypatch):
 
     monkeypatch.setattr(arxiv_retriever.arxiv, "Client", FakeClient)
 
-    # Skip file downloads in convert_to_paper
-    monkeypatch.setattr(arxiv_retriever, "extract_text_from_html", lambda *a, **kw: None)
-    monkeypatch.setattr(arxiv_retriever, "extract_text_from_pdf", lambda *a, **kw: None)
-    monkeypatch.setattr(arxiv_retriever, "extract_text_from_tar", lambda *a, **kw: None)
-
     retriever = ArxivRetriever(config)
     papers = retriever.retrieve_papers()
 
     assert len(papers) == len(new_entries)
     assert set(p.title for p in papers) == set(e.title for e in new_entries)
+    assert all(p.published_date == "2026-07-13" for p in papers)
+    assert all(p.full_text is None for p in papers)
+    assert all(p.source_url and "/e-print/" in p.source_url for p in papers)
+
+
+def test_arxiv_enrichment_runs_only_when_requested(config, monkeypatch):
+    operations = []
+
+    def fake_run(func, args, *, timeout, operation, paper_title):
+        operations.append(operation)
+        return None if operation == "Tar extraction" else "selected paper text"
+
+    monkeypatch.setattr(arxiv_retriever, "_run_with_hard_timeout", fake_run)
+    retriever = ArxivRetriever(config)
+    paper = SimpleNamespace(
+        full_text=None,
+        source_url="https://arxiv.org/e-print/2607.00001",
+        url="https://arxiv.org/abs/2607.00001",
+        pdf_url="https://arxiv.org/pdf/2607.00001",
+        title="Selected Paper",
+    )
+
+    enriched = retriever.enrich_paper(paper)
+
+    assert enriched.full_text == "selected paper text"
+    assert operations == ["Tar extraction", "HTML extraction"]
 
 
 def test_run_with_hard_timeout_returns_value():

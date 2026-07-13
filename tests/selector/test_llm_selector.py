@@ -51,8 +51,8 @@ def _selector_config(config, **overrides):
     with open_dict(config):
         config.llm.filter.enabled = True
         config.llm.filter.batch_size = overrides.get("batch_size", 5)
-        config.llm.filter.max_batches = overrides.get("max_batches", 20)
         config.llm.filter.output_paper_num = overrides.get("output_paper_num", 30)
+        config.executor.max_paper_num = overrides.get("max_candidates", 100)
         config.llm.filter.max_attempts = overrides.get("max_attempts", 3)
         config.llm.filter.retry_delay_seconds = 0
         config.llm.filter.score_step = 5
@@ -117,7 +117,7 @@ def test_selector_matches_scores_by_id_and_combines_embedding(config):
 
 
 def test_selector_scores_five_papers_per_batch(config):
-    config = _selector_config(config, batch_size=5, max_batches=20)
+    config = _selector_config(config, batch_size=5)
     client = EchoClient(score=50)
 
     selected = LLMPaperSelector(config, client).select(_papers(12))
@@ -154,11 +154,11 @@ def test_selector_falls_back_to_embedding_for_failed_batch(config):
     assert all(paper.selection_fallback for paper in selected)
 
 
-def test_selector_caps_work_to_batch_size_times_max_batches(config):
+def test_selector_uses_executor_candidate_limit(config):
     config = _selector_config(
         config,
         batch_size=2,
-        max_batches=2,
+        max_candidates=4,
         output_paper_num=10,
     )
     client = EchoClient(score=50)

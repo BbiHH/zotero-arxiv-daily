@@ -360,32 +360,52 @@ class ArxivRetriever(BaseRetriever):
         authors = [a.name for a in raw_paper.authors]
         abstract = raw_paper.summary
         pdf_url = raw_paper.pdf_url
-        full_text = extract_text_from_tar(
-            raw_paper,
-            policy=self.network_policy,
-            timeout=self.tar_extract_timeout,
-        )
-        if full_text is None:
-            full_text = extract_text_from_html(
-                raw_paper,
-                policy=self.network_policy,
-                timeout=self.html_extract_timeout,
-            )
-        if full_text is None:
-            full_text = extract_text_from_pdf(
-                raw_paper,
-                policy=self.network_policy,
-                timeout=self.pdf_extract_timeout,
-            )
+        published = getattr(raw_paper, "published", None)
+        published_date = published.strftime("%Y-%m-%d") if published is not None else None
+        source_url = raw_paper.source_url()
         return Paper(
             source=self.name,
             title=title,
             authors=authors,
             abstract=abstract,
             url=raw_paper.entry_id,
+            source_url=source_url,
+            published_date=published_date,
             pdf_url=pdf_url,
-            full_text=full_text,
+            full_text=None,
         )
+
+    def enrich_paper(self, paper: Paper) -> Paper:
+        """Download full text only for papers that survive both ranking stages."""
+        if paper.full_text is not None:
+            return paper
+
+        if paper.source_url:
+            paper.full_text = _run_with_hard_timeout(
+                _extract_text_from_tar_worker,
+                (paper.source_url, paper.url, paper.title, self.network_policy),
+                timeout=self.tar_extract_timeout,
+                operation="Tar extraction",
+                paper_title=paper.title,
+            )
+        if paper.full_text is None:
+            html_url = paper.url.replace("/abs/", "/html/")
+            paper.full_text = _run_with_hard_timeout(
+                _extract_text_from_html_worker,
+                (html_url, self.network_policy),
+                timeout=self.html_extract_timeout,
+                operation="HTML extraction",
+                paper_title=paper.title,
+            )
+        if paper.full_text is None and paper.pdf_url:
+            paper.full_text = _run_with_hard_timeout(
+                _extract_text_from_pdf_worker,
+                (paper.pdf_url, self.network_policy),
+                timeout=self.pdf_extract_timeout,
+                operation="PDF extraction",
+                paper_title=paper.title,
+            )
+        return paper
 
 
 def extract_text_from_html(

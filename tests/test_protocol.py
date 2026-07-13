@@ -8,8 +8,9 @@ from tests.canned_responses import make_sample_paper, make_stub_openai_client
 @pytest.fixture()
 def llm_params():
     return {
-        "language": "English",
-        "generation_kwargs": {"model": "gpt-4o-mini", "max_tokens": 16384},
+        "generation_kwargs": {"model": "gpt-4o-mini"},
+        "tldr": {"max_attempts": 3, "retry_delay_seconds": 0},
+        "affiliation": {"max_attempts": 3, "retry_delay_seconds": 0},
     }
 
 
@@ -26,26 +27,56 @@ def test_tldr_returns_response(llm_params):
     assert paper.tldr == result
 
 
+def test_tldr_prompt_requests_only_high_level_experimental_effects(llm_params):
+    captured = {}
+
+    class Completions:
+        @staticmethod
+        def create(**kwargs):
+            captured.update(kwargs)
+            return type("Response", (), {
+                "choices": [type("Choice", (), {
+                    "message": type("Message", (), {"content": "中文总结"})()
+                })()]
+            })()
+
+    client = type("Client", (), {
+        "chat": type("Chat", (), {"completions": Completions()})()
+    })()
+    make_sample_paper().generate_tldr(client, llm_params)
+
+    prompt = captured["messages"][1]["content"]
+    assert "总体实验效果或结论" in prompt
+    assert "无需追求具体指标、数值或完整实验细节" in prompt
+
+
 def test_tldr_without_abstract_or_fulltext(llm_params):
     client = make_stub_openai_client()
     paper = make_sample_paper(abstract="", full_text=None)
     result = paper.generate_tldr(client, llm_params)
-    assert "Failed to generate TLDR" in result
+    assert result == "TLDR 生成失败：本次无法生成可靠的中文总结，请查看英文摘要。"
 
 
-def test_tldr_falls_back_to_abstract_on_error(llm_params):
+def test_tldr_returns_chinese_failure_message_on_error(llm_params):
     paper = make_sample_paper()
+    calls = 0
 
     # Client whose create() raises
     from types import SimpleNamespace
 
+    def fail(**kwargs):
+        nonlocal calls
+        calls += 1
+        raise RuntimeError("API down")
+
     broken_client = SimpleNamespace(
         chat=SimpleNamespace(
-            completions=SimpleNamespace(create=lambda **kw: (_ for _ in ()).throw(RuntimeError("API down")))
+            completions=SimpleNamespace(create=fail)
         )
     )
     result = paper.generate_tldr(broken_client, llm_params)
-    assert result == paper.abstract
+    assert result == "TLDR 生成失败：本次无法生成可靠的中文总结，请查看英文摘要。"
+    assert calls == 3
 
 
 def test_tldr_truncates_long_prompt(llm_params):
@@ -77,20 +108,23 @@ def test_affiliations_none_without_fulltext(llm_params):
 
 
 def test_affiliations_deduplicates(llm_params):
-    """The stub returns two distinct affiliations, so no dedup needed.
-    But confirm the set() dedup in the code doesn't break anything.
-    """
+    """Affiliation deduplication preserves the returned author order."""
     client = make_stub_openai_client()
     paper = make_sample_paper()
     result = paper.generate_affiliations(client, llm_params)
     assert len(result) == len(set(result))
+    assert result == ["TsingHua University", "Peking University"]
 
 
 def test_affiliations_malformed_llm_output(llm_params):
     """LLM returns affiliations without JSON brackets. Should fall back gracefully."""
     from types import SimpleNamespace
 
+    calls = 0
+
     def create_no_brackets(**kwargs):
+        nonlocal calls
+        calls += 1
         return SimpleNamespace(
             choices=[
                 SimpleNamespace(
@@ -106,8 +140,9 @@ def test_affiliations_malformed_llm_output(llm_params):
     )
     paper = make_sample_paper()
     result = paper.generate_affiliations(client, llm_params)
-    # re.search for [...] will fail -> AttributeError -> caught -> returns None
+    # Strict JSON parsing fails, so the public method returns None.
     assert result is None
+    assert calls == 3
 
 
 def test_affiliations_error_returns_none(llm_params):

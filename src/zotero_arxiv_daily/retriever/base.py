@@ -3,7 +3,6 @@ from omegaconf import DictConfig
 from ..protocol import Paper, RawPaperItem
 from tqdm import tqdm
 from typing import Type
-from time import sleep
 from loguru import logger
 
 
@@ -21,6 +20,10 @@ class BaseRetriever(ABC):
     def convert_to_paper(self, raw_paper:RawPaperItem) -> Paper | None:
         pass
 
+    def enrich_paper(self, paper: Paper) -> Paper:
+        """Populate expensive optional fields after the paper has been selected."""
+        return paper
+
     def retrieve_papers(self) -> list[Paper]:
         raw_papers = self._retrieve_raw_papers()
         logger.info("Processing papers...")
@@ -33,7 +36,6 @@ class BaseRetriever(ABC):
                 continue
             if paper is not None:
                 papers.append(paper)
-            sleep(1)
         return papers
 
 registered_retrievers = {}

@@ -22,7 +22,6 @@ llm:
     enabled: true
     output_paper_num: 30
     batch_size: 5
-    max_batches: 20
     research_profile: |
       Focus on multimodal and large vision-language model reasoning, especially work
       that studies how models use, inspect, or reason with visual information.

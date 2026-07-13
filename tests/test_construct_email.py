@@ -1,78 +1,71 @@
-"""Tests for zotero_arxiv_daily.construct_email: render_email, get_stars, get_block_html."""
+"""Tests for Markdown email rendering."""
 
-from zotero_arxiv_daily.construct_email import render_email, get_stars, get_block_html, get_empty_html
+from zotero_arxiv_daily.construct_email import render_email, render_paper_markdown
 from tests.canned_responses import make_sample_paper
 
 
 def test_render_email_with_papers():
-    papers = [make_sample_paper(score=7.5, tldr="A great paper.", affiliations=["MIT"])]
-    html = render_email(papers)
-    assert "Sample Paper Title" in html
-    assert "A great paper." in html
-    assert "MIT" in html
+    papers = [make_sample_paper(tldr="中文总结。", affiliations=["MIT"])]
+
+    content = render_email(papers)
+
+    assert content.startswith("# Daily arXiv Papers")
+    assert "今日精选论文：1 篇。" in content
+    assert "## 1. Sample Paper Title" in content
+    assert "**作者：** Author A, Author B, Author C" in content
+    assert "**机构：** MIT" in content
+    assert "**发布日期：** 2026-07-13" in content
+    assert "### TLDR\n\n中文总结。" in content
+    assert "### Abstract\n\nThis paper explores a novel approach" in content
+    assert "[arXiv](https://arxiv.org/abs/2026.00001)" in content
+    assert "[PDF](https://arxiv.org/pdf/2026.00001)" in content
+    assert "Relevance" not in content
+    assert "<table" not in content
 
 
 def test_render_email_empty_list():
-    html = render_email([])
-    assert "No Papers Today" in html
+    content = render_email([])
+    assert "No Papers Today" in content
 
 
-def test_render_email_author_truncation():
-    authors = [f"Author {i}" for i in range(10)]
-    paper = make_sample_paper(authors=authors, score=7.0, tldr="ok")
-    html = render_email([paper])
-    assert "Author 0" in html
-    assert "Author 1" in html
-    assert "Author 2" in html
-    assert "..." in html
-    assert "Author 8" in html
-    assert "Author 9" in html
-    # Middle authors should be truncated
-    assert "Author 5" not in html
+def test_render_email_limits_authors_to_three():
+    paper = make_sample_paper(authors=[f"Author {i}" for i in range(10)], tldr="ok")
+    content = render_email([paper])
+
+    assert "Author 0, Author 1, Author 2, ..." in content
+    assert "Author 3" not in content
+    assert "Author 9" not in content
 
 
-def test_render_email_affiliation_truncation():
-    affiliations = [f"Uni {i}" for i in range(8)]
-    paper = make_sample_paper(affiliations=affiliations, score=7.0, tldr="ok")
-    html = render_email([paper])
-    assert "Uni 0" in html
-    assert "Uni 4" in html
-    assert "..." in html
-    assert "Uni 7" not in html
+def test_render_email_limits_affiliations_to_three():
+    paper = make_sample_paper(
+        affiliations=[f"Uni {i}" for i in range(8)],
+        tldr="ok",
+    )
+    content = render_email([paper])
+
+    assert "Uni 0, Uni 1, Uni 2, ..." in content
+    assert "Uni 3" not in content
+    assert "Uni 7" not in content
 
 
-def test_render_email_no_affiliations():
-    paper = make_sample_paper(affiliations=None, score=7.0, tldr="ok")
-    html = render_email([paper])
-    assert "Unknown Affiliation" in html
+def test_render_email_unknown_affiliation():
+    content = render_email([make_sample_paper(affiliations=None, tldr="ok")])
+    assert "Unknown Affiliation" in content
 
 
-def test_get_stars_low_score():
-    assert get_stars(5.0) == ""
-    assert get_stars(6.0) == ""
+def test_render_paper_markdown_has_stable_section_order():
+    paper = make_sample_paper(tldr="总结", affiliations=["MIT"])
+    content = render_paper_markdown(paper, 3)
 
-
-def test_get_stars_high_score():
-    stars = get_stars(8.0)
-    assert stars.count("full-star") == 5
-
-
-def test_get_stars_mid_score():
-    stars = get_stars(7.0)
-    assert "star" in stars
-    assert stars.count("full-star") + stars.count("half-star") > 0
-
-
-def test_get_block_html_contains_all_fields():
-    html = get_block_html("Title", "Auth", "3.5", "Summary", "http://pdf.url", "MIT")
-    assert "Title" in html
-    assert "Auth" in html
-    assert "3.5" in html
-    assert "Summary" in html
-    assert "http://pdf.url" in html
-    assert "MIT" in html
-
-
-def test_get_empty_html():
-    html = get_empty_html()
-    assert "No Papers Today" in html
+    markers = [
+        "## 3. Sample Paper Title",
+        "**作者：**",
+        "**机构：**",
+        "**发布日期：**",
+        "### TLDR",
+        "### Abstract",
+        "**链接：**",
+    ]
+    positions = [content.index(marker) for marker in markers]
+    assert positions == sorted(positions)

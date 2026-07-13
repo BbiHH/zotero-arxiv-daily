@@ -37,7 +37,15 @@ class BaseReranker(ABC):
         self.config = config
 
     def rerank(self, candidates:list[Paper], corpus:list[CorpusPaper]) -> list[Paper]:
-        sim = self.get_similarity_score([c.abstract for c in candidates], [c.abstract for c in corpus])
+        candidate_documents = [
+            f"Title: {candidate.title}\nAbstract: {candidate.abstract}"
+            for candidate in candidates
+        ]
+        corpus_queries = [
+            f"Title: {paper.title}\nAbstract: {paper.abstract}"
+            for paper in corpus
+        ]
+        sim = self.get_similarity_score(candidate_documents, corpus_queries)
         assert sim.shape == (len(candidates), len(corpus))
 
         configured_priorities = None

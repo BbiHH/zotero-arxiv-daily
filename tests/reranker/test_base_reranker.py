@@ -25,6 +25,8 @@ class StubReranker(BaseReranker):
         self._sim = sim_matrix
 
     def get_similarity_score(self, s1, s2):
+        self.seen_documents = s1
+        self.seen_queries = s2
         return self._sim
 
 
@@ -42,6 +44,8 @@ def test_rerank_scores_and_sorts():
     assert ranked[0].title == "Paper 1"
     assert ranked[1].title == "Paper 0"
     assert ranked[0].score > ranked[1].score
+    assert reranker.seen_documents[0].startswith("Title: Paper 0\nAbstract:")
+    assert reranker.seen_queries[0].startswith("Title: Corpus Paper 0\nAbstract:")
 
 
 def test_rerank_without_collection_priority_uses_plain_corpus_mean():

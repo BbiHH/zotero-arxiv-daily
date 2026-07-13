@@ -32,13 +32,15 @@ The app is a linear pipeline orchestrated by `Executor` (`src/zotero_arxiv_daily
 1. **Fetch Zotero corpus** → pyzotero API
 2. **Filter corpus** → `include_path` / `ignore_path` glob patterns
 3. **Retrieve new papers** → from configured sources (arXiv RSS, bioRxiv/medRxiv REST API)
-4. **Rerank** → weighted embedding similarity to corpus (newer Zotero papers weighted higher)
-5. **Generate TLDRs + affiliations** → OpenAI-compatible LLM API
-6. **Render + send email** → HTML email via SMTP
+4. **Rerank** → title-and-abstract embedding similarity with optional collection weights
+5. **LLM select** → combine LLM scores with embedding-rank percentiles
+6. **Enrich selected papers** → download full text only for the final set
+7. **Generate TLDRs + affiliations** → OpenAI-compatible LLM API with retries
+8. **Render + send email** → Markdown/plain-text email via secure SMTP
 
 ### Plugin Systems
 
-**Retrievers** (`src/zotero_arxiv_daily/retriever/`): Register via `@register_retriever("name")` decorator on a `BaseRetriever` subclass. Each retriever implements `_retrieve_raw_papers()` and `convert_to_paper()`. Discovered at runtime via `get_retriever_cls(name)` from a module-level `registered_retrievers` dict.
+**Retrievers** (`src/zotero_arxiv_daily/retriever/`): Register via `@register_retriever("name")` decorator on a `BaseRetriever` subclass. Each retriever implements `_retrieve_raw_papers()` and `convert_to_paper()`; expensive selected-paper enrichment can override `enrich_paper()`. Discovered at runtime via `get_retriever_cls(name)` from a module-level `registered_retrievers` dict.
 
 **Rerankers** (`src/zotero_arxiv_daily/reranker/`): Register via `@register_reranker("name")` decorator on a `BaseReranker` subclass. Two implementations: `local` (sentence-transformers) and `api` (OpenAI-compatible embeddings endpoint). Discovered via `get_reranker_cls(name)`.
 
