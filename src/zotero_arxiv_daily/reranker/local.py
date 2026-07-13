@@ -4,7 +4,9 @@ import warnings
 import numpy as np
 @register_reranker("local")
 class LocalReranker(BaseReranker):
-    def get_similarity_score(self, s1: list[str], s2: list[str]) -> np.ndarray:
+    def get_similarity_score(
+        self, candidate_documents: list[str], corpus_queries: list[str]
+    ) -> np.ndarray:
         from sentence_transformers import SentenceTransformer
         if not self.config.executor.debug:
             from transformers.utils import logging as transformers_logging
@@ -20,11 +22,16 @@ class LocalReranker(BaseReranker):
             warnings.filterwarnings("ignore", category=FutureWarning)
 
         encoder = SentenceTransformer(self.config.reranker.local.model, trust_remote_code=True)
-        if self.config.reranker.local.encode_kwargs:
-            encode_kwargs = self.config.reranker.local.encode_kwargs
-        else:
-            encode_kwargs = {}
-        s1_feature = encoder.encode(s1,**encode_kwargs,show_progress_bar=True)
-        s2_feature = encoder.encode(s2,**encode_kwargs,show_progress_bar=True)
-        sim = encoder.similarity(s1_feature, s2_feature)
-        return sim.numpy()
+        local_config = self.config.reranker.local
+        shared_kwargs = dict(local_config.get("encode_kwargs") or {})
+        query_kwargs = shared_kwargs | dict(local_config.get("query_encode_kwargs") or {})
+        document_kwargs = shared_kwargs | dict(local_config.get("document_encode_kwargs") or {})
+        query_kwargs.setdefault("show_progress_bar", True)
+        document_kwargs.setdefault("show_progress_bar", True)
+
+        query_features = encoder.encode(corpus_queries, **query_kwargs)
+        document_features = encoder.encode(candidate_documents, **document_kwargs)
+        sim = encoder.similarity(document_features, query_features)
+        if hasattr(sim, "detach"):
+            return sim.detach().cpu().numpy()
+        return np.asarray(sim)

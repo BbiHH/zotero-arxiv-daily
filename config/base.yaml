@@ -3,6 +3,7 @@ zotero:
   api_key: ??? # An Zotero API key with read access.
   include_path: null # A list of glob patterns marking the Zotero collections that should be included. Example: ["2026/survey/**","2026/reading-group/**"]
   ignore_path: null # A list of glob patterns marking the Zotero collections that should be excluded. Example: ["2026/ignore/**","archive/**"]
+  collection_priority: null # Optional [{pattern, weight}] rules. Each collection is averaged first, then collection means are combined by normalized weights. Example: [{pattern: "research/recent-focus/**", weight: 3}, {pattern: "research/important/**", weight: 2}, {pattern: "research/to-read/**", weight: 1}]
 
 source:
   arxiv:
@@ -32,11 +33,13 @@ llm:
 
 reranker:
   local:
-    model: jinaai/jina-embeddings-v5-text-nano-retrieval # The Hugging Face model name of the local embedding model. Example: jinaai/jina-embeddings-v5-text-nano
-    encode_kwargs:
-    # The kwargs for the encode method of the local embedding model. Details see [here](https://www.sbert.net/docs/package_reference/SentenceTransformer.html#sentence_transformers.SentenceTransformer.encode)
-      task: retrieval
-      prompt_name: document
+    model: Qwen/Qwen3-Embedding-0.6B # The Hugging Face model name of the local embedding model.
+    query_encode_kwargs: # Zotero interest papers are retrieval queries.
+      prompt: "Instruct: Given a scientific paper title and abstract, retrieve other scientific papers that are relevant to its research topic, methods, or findings.\nQuery: "
+      normalize_embeddings: true
+    document_encode_kwargs: # Newly retrieved papers are retrieval documents.
+      normalize_embeddings: true
+    encode_kwargs: null # Backward compatibility: legacy shared kwargs are applied to both sides; side-specific kwargs above take precedence.
   api:
     key: null # API Key of your embedding model API. Example: sk-xxx
     base_url: null # API URL of your embedding model API. Example: https://api.openai.com/v1
