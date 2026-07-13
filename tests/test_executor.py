@@ -151,6 +151,7 @@ def test_fetch_zotero_corpus_paper_with_zero_collections(config, monkeypatch):
 def test_run_end_to_end(config, monkeypatch):
     """Full pipeline: Zotero fetch -> filter -> retrieve -> rerank -> TLDR -> email."""
     import smtplib
+    from email import message_from_string
 
     from omegaconf import open_dict
 
@@ -167,6 +168,9 @@ def test_run_end_to_end(config, monkeypatch):
         config.executor.source = ["arxiv"]
         config.executor.reranker = "api"
         config.executor.send_empty = False
+        config.llm.filter.enabled = True
+        config.llm.filter.output_paper_num = 1
+        config.llm.filter.retry_delay_seconds = 0
 
     # 1. Stub pyzotero
     stub_zot = make_stub_zotero_client()
@@ -207,6 +211,9 @@ def test_run_end_to_end(config, monkeypatch):
     assert len(sent) == 1, "Email should have been sent"
     _, _, email_body = sent[0]
     assert "text/html" in email_body
+    decoded_html = message_from_string(email_body).get_payload(decode=True).decode("utf-8")
+    assert "E2E Paper 1" in decoded_html
+    assert "E2E Paper 2" not in decoded_html
 
 
 def test_run_no_papers_send_empty_false(config, monkeypatch):

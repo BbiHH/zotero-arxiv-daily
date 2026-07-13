@@ -1,6 +1,8 @@
 """Shared stub factories for tests. No unittest.mock anywhere."""
 
 from datetime import datetime
+import json
+import re
 from types import SimpleNamespace
 
 from zotero_arxiv_daily.protocol import CorpusPaper, Paper
@@ -13,6 +15,7 @@ from zotero_arxiv_daily.protocol import CorpusPaper, Paper
 _AFFILIATION_MARKER = "You are an assistant who perfectly extracts affiliations"
 _AFFILIATION_RESPONSE = '["TsingHua University","Peking University"]'
 _TLDR_RESPONSE = "Hello! How can I assist you today?"
+_PAPER_FILTER_MARKER = "The scores object must contain every supplied ID"
 
 
 def _make_chat_response(content: str) -> SimpleNamespace:
@@ -36,6 +39,11 @@ def _stub_chat_create(**kwargs):
     request_str = str(messages)
     if _AFFILIATION_MARKER in request_str:
         return _make_chat_response(_AFFILIATION_RESPONSE)
+    if _PAPER_FILTER_MARKER in request_str:
+        paper_ids = re.findall(r'"id": "(paper_\d+)"', request_str)
+        return _make_chat_response(
+            json.dumps({"scores": {paper_id: 50 for paper_id in paper_ids}})
+        )
     return _make_chat_response(_TLDR_RESPONSE)
 
 

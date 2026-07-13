@@ -41,6 +41,27 @@ llm:
   # Arguments for the LLM API. See [here](https://platform.openai.com/docs/api-reference/chat/create) for more details.
     max_tokens: 16384
     model: ???
+  filter:
+    enabled: false # Enable the second-stage LLM funnel after embedding recall.
+    output_paper_num: 30 # Number of papers kept for TLDR generation and email.
+    batch_size: 5 # Papers scored in each LLM request.
+    max_batches: 20 # Safety cap; 5 x 20 allows at most 100 embedding candidates.
+    max_attempts: 3 # Retries for API failures or invalid/mismatched JSON.
+    retry_delay_seconds: 2
+    score_step: 5 # LLM scores must be multiples of this value on a 0-100 scale.
+    use_json_mode: false # Enable only when the configured OpenAI-compatible API supports response_format.
+    prompt_file: config/prompts/paper_filter.txt
+    research_profile: |
+      Prioritize papers that directly support the user's current research interests.
+    screening_requirements: |
+      Prefer papers with clear research questions, substantive methods, and useful findings.
+      Deprioritize papers that are only broadly related or lack a clear scientific contribution.
+    weights:
+      llm: 0.7
+      embedding: 0.3
+    generation_kwargs: # Overrides only for filtering; model is inherited from llm.generation_kwargs.
+      temperature: 0
+      max_tokens: 800
   language: English # Preferred language for the TL;DR. Example: English
 
 reranker:
@@ -61,6 +82,6 @@ reranker:
 executor:
   debug: false # Whether to use debug mode. Example: true
   send_empty: false # Whether to send an empty email even if no new papers today. Example: true
-  max_paper_num: 100 # The maximum number of the papers presented in the email. Example: 100
+  max_paper_num: 100 # Embedding candidates retained before the optional LLM filter. Example: 100
   source: ??? # The sources of papers to retrieve. Example: ['arxiv','biorxiv','medrxiv']
   reranker: local # The reranker to use. Example: 'local' or 'api'

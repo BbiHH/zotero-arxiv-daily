@@ -81,7 +81,8 @@ class BaseReranker(ABC):
             scores = np.average(group_means, axis=1, weights=active_weights) * 10
 
         for s,c in zip(scores,candidates):
-            c.score = s
+            c.embedding_score = float(s)
+            c.score = float(s)
         candidates = sorted(candidates,key=lambda x: x.score,reverse=True)
         return candidates
     

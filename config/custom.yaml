@@ -18,6 +18,18 @@ llm:
     base_url: ${oc.env:OPENAI_API_BASE}
   generation_kwargs:
     model: gpt-4o-mini
+  filter:
+    enabled: true
+    output_paper_num: 30
+    batch_size: 5
+    max_batches: 20
+    research_profile: |
+      Focus on multimodal and large vision-language model reasoning, especially work
+      that studies how models use, inspect, or reason with visual information.
+    screening_requirements: |
+      Prefer papers with a clear problem, concrete idea or method, and meaningful
+      experimental findings. Deprioritize weakly related applications and vague
+      incremental work.
 
 source:
   arxiv:
