@@ -73,6 +73,9 @@ llm:
       temperature: 0
       max_tokens: 800
 reranker:
+  embedding_cache:
+    enabled: true # Reuse unchanged Zotero/candidate vectors across runs without changing scores.
+    directory: .cache/zotero-arxiv-daily/embeddings # Persist this directory with GitHub Actions cache.
   local:
     model: Qwen/Qwen3-Embedding-0.6B # The Hugging Face model name of the local embedding model.
     query_encode_kwargs: # Zotero interest papers are retrieval queries.

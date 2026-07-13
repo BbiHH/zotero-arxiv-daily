@@ -3,10 +3,13 @@
 import smtplib
 import tarfile
 import io
+from email import policy
+from email.parser import Parser
 
 import pytest
 
 from zotero_arxiv_daily.utils import glob_match, send_email, extract_tex_code_from_tar, _bm25_pick
+from zotero_arxiv_daily.diagnostics import RunDiagnostics
 from tests.canned_responses import make_stub_smtp
 
 
@@ -129,8 +132,46 @@ def test_send_email_starttls_success(config, monkeypatch):
     sender, recipients, body = sent[0]
     assert sender == "test@example.com"
     assert recipients == ["test@example.com"]
-    # Body is a full MIME message (base64-encoded). Check the raw MIME string.
     assert "text/plain" in body
+    assert "text/markdown" in body
+
+
+def test_send_email_attaches_markdown_digest(config, monkeypatch):
+    sent = []
+    monkeypatch.setattr(smtplib, "SMTP", make_stub_smtp(sent))
+    markdown = "# Daily arXiv Papers\n\n中文总结。\n"
+
+    send_email(config, markdown)
+
+    message = Parser(policy=policy.default).parsestr(sent[0][2])
+    plain_part = message.get_body(preferencelist=("plain",))
+    assert plain_part is not None
+    assert "日期：" in plain_part.get_content()
+    assert "论文获取：正常" in plain_part.get_content()
+    attachments = list(message.iter_attachments())
+    assert len(attachments) == 1
+    assert attachments[0].get_content_type() == "text/markdown"
+    assert attachments[0].get_filename().startswith("daily-arxiv-")
+    assert attachments[0].get_filename().endswith(".md")
+    assert attachments[0].get_content() == markdown
+
+
+def test_send_email_includes_sanitized_diagnostics(config, monkeypatch):
+    sent = []
+    monkeypatch.setattr(smtplib, "SMTP", make_stub_smtp(sent))
+    diagnostics = RunDiagnostics(config)
+    diagnostics.add(
+        "ERROR",
+        f"Embedding API failed with key {config.llm.api.key}",
+    )
+
+    send_email(config, "# Digest\n", paper_count=3, diagnostics=diagnostics)
+
+    message = Parser(policy=policy.default).parsestr(sent[0][2])
+    plain_content = message.get_body(preferencelist=("plain",)).get_content()
+    assert "论文获取：存在异常，共 3 篇。" in plain_content
+    assert "[ERROR] Embedding API failed with key <redacted>" in plain_content
+    assert str(config.llm.api.key) not in plain_content
 
 
 def test_send_email_falls_back_to_ssl(config, monkeypatch):

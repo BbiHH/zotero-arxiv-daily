@@ -27,6 +27,14 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-huggingface-
 
+      - name: Cache embedding vectors
+        uses: actions/cache@v4
+        with:
+          path: .cache/zotero-arxiv-daily/embeddings
+          key: ${{ runner.os }}-embedding-v1-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-embedding-v1-
+
       - name: Run script
         env:
           ZOTERO_ID: ${{ secrets.ZOTERO_ID }}

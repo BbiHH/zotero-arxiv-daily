@@ -101,6 +101,48 @@ def test_local_reranker_legacy_encode_kwargs_apply_to_both_sides(monkeypatch):
     assert calls[1]["normalize_embeddings"] is True
 
 
+def test_local_reranker_reuses_cached_embeddings(monkeypatch, tmp_path):
+    calls = []
+
+    class FakeSentenceTransformer:
+        def __init__(self, model, trust_remote_code):
+            pass
+
+        def encode(self, texts, **kwargs):
+            calls.append(list(texts))
+            return np.ones((len(texts), 2))
+
+        def similarity(self, documents, queries):
+            return np.ones((len(documents), len(queries)))
+
+    monkeypatch.setitem(
+        sys.modules,
+        "sentence_transformers",
+        SimpleNamespace(SentenceTransformer=FakeSentenceTransformer),
+    )
+    config = OmegaConf.create({
+        "executor": {"debug": True},
+        "reranker": {
+            "embedding_cache": {
+                "enabled": True,
+                "directory": str(tmp_path),
+            },
+            "local": {
+                "model": "test/model",
+                "query_encode_kwargs": {"prompt": "query: "},
+                "document_encode_kwargs": {"normalize_embeddings": True},
+            },
+        },
+    })
+
+    LocalReranker(config).get_similarity_score(["candidate"], ["corpus"])
+    first_call_count = len(calls)
+    LocalReranker(config).get_similarity_score(["candidate"], ["corpus"])
+
+    assert first_call_count == 2
+    assert len(calls) == first_call_count
+
+
 @pytest.mark.slow
 def test_local_reranker(config):
     reranker = LocalReranker(config)

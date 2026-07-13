@@ -12,6 +12,7 @@ from .utils import get_local_date, send_email
 from openai import OpenAI
 from tqdm import tqdm
 from .selector import LLMPaperSelector
+from .diagnostics import RunDiagnostics
 from pathlib import Path
 
 
@@ -107,6 +108,14 @@ class Executor:
 
     
     def run(self):
+        diagnostics = RunDiagnostics(self.config)
+        sink_id = logger.add(diagnostics, level="WARNING")
+        try:
+            return self._run(diagnostics)
+        finally:
+            logger.remove(sink_id)
+
+    def _run(self, diagnostics: RunDiagnostics):
         corpus = self.fetch_zotero_corpus()
         corpus = self.filter_corpus(corpus)
         if len(corpus) == 0:
@@ -143,5 +152,10 @@ class Executor:
         logger.info("Sending email...")
         email_content = render_email(reranked_papers)
         self.save_markdown(email_content)
-        send_email(self.config, email_content)
+        send_email(
+            self.config,
+            email_content,
+            paper_count=len(reranked_papers),
+            diagnostics=diagnostics,
+        )
         logger.info("Email sent successfully")

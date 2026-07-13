@@ -206,6 +206,9 @@ llm:
       temperature: 0
       max_tokens: 800
 reranker:
+  embedding_cache:
+    enabled: true # Reuse unchanged vectors across local and GitHub Actions runs.
+    directory: .cache/zotero-arxiv-daily/embeddings
   local:
     model: Qwen/Qwen3-Embedding-0.6B # The Hugging Face model name of the local embedding model.
     query_encode_kwargs: # Zotero interest papers are encoded as retrieval queries.
@@ -268,9 +271,24 @@ downloaded and extracted after selection, so expensive TeX/HTML/PDF processing
 is limited to the final email set. The TLDR and affiliation calls each retry
 transient or invalid responses up to their configured `max_attempts`.
 
-The email body is canonical Markdown sent as UTF-8 plain text. The same digest
-is written to `executor.markdown_output_dir` and uploaded by GitHub Actions as a
-30-day artifact, which makes it easy to pass the daily result to another LLM.
+Embedding vectors are cached by backend, model, query/document encoding
+options, endpoint, and complete paper text. Unchanged Zotero papers therefore
+skip repeated encoding on later runs, while a model, prompt, endpoint, or text
+change automatically produces a cache miss. The local SQLite cache is stored in
+`reranker.embedding_cache.directory`; both GitHub Actions workflows persist that
+directory across runs. Cache read/write failures fall back to normal embedding
+calculation and do not block the daily digest.
+
+The email has a minimal plain-text body containing the local date and retrieval
+status/count, plus the canonical digest as a dated UTF-8 `.md` attachment. The
+digest is also written to `executor.markdown_output_dir` and uploaded by GitHub
+Actions as a 30-day artifact, which makes it easy to open locally or pass to
+another LLM.
+
+Recoverable warnings and errors raised before email delivery are summarized in
+the status body. Diagnostics are deduplicated, length- and count-limited, and
+configured Zotero/LLM/embedding/email secrets are redacted. Fatal failures that
+prevent the send step itself remain visible in the GitHub Actions log.
 
 That's all! Now you can test the workflow by manually triggering it:
 ![test](./assets/test.png)

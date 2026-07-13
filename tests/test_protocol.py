@@ -1,8 +1,12 @@
 """Tests for zotero_arxiv_daily.protocol: Paper.generate_tldr, Paper.generate_affiliations."""
 
+import json
+
 import pytest
+from omegaconf import OmegaConf
 
 from tests.canned_responses import make_sample_paper, make_stub_openai_client
+from zotero_arxiv_daily.protocol import _task_generation_kwargs
 
 
 @pytest.fixture()
@@ -25,6 +29,35 @@ def test_tldr_returns_response(llm_params):
     result = paper.generate_tldr(client, llm_params)
     assert result == "Hello! How can I assist you today?"
     assert paper.tldr == result
+
+
+def test_generation_kwargs_from_hydra_config_are_json_serializable(config):
+    kwargs = _task_generation_kwargs(config.llm, "tldr")
+
+    assert json.loads(json.dumps(kwargs)) == {
+        "model": "gpt-4o-mini",
+        "temperature": 0,
+        "max_tokens": 350,
+    }
+
+
+@pytest.mark.parametrize("task", ["tldr", "affiliation"])
+def test_generation_kwargs_recursively_convert_nested_hydra_values(task):
+    llm_params = OmegaConf.create({
+        "generation_kwargs": {
+            "model": "gpt-4o-mini",
+            "extra_body": {"provider": {"order": ["primary", "fallback"]}},
+        },
+        task: {"generation_kwargs": {"temperature": 0}},
+    })
+
+    kwargs = _task_generation_kwargs(llm_params, task)
+
+    assert json.loads(json.dumps(kwargs)) == {
+        "model": "gpt-4o-mini",
+        "extra_body": {"provider": {"order": ["primary", "fallback"]}},
+        "temperature": 0,
+    }
 
 
 def test_tldr_prompt_requests_only_high_level_experimental_effects(llm_params):

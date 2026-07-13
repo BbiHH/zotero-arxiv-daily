@@ -151,7 +151,8 @@ def test_fetch_zotero_corpus_paper_with_zero_collections(config, monkeypatch):
 def test_run_end_to_end(config, monkeypatch):
     """Full pipeline: Zotero fetch -> filter -> retrieve -> rerank -> TLDR -> email."""
     import smtplib
-    from email import message_from_string
+    from email import policy
+    from email.parser import Parser
 
     from omegaconf import open_dict
 
@@ -215,8 +216,14 @@ def test_run_end_to_end(config, monkeypatch):
     # Assertions
     assert len(sent) == 1, "Email should have been sent"
     _, _, email_body = sent[0]
-    assert "text/plain" in email_body
-    decoded_content = message_from_string(email_body).get_payload(decode=True).decode("utf-8")
+    message = Parser(policy=policy.default).parsestr(email_body)
+    plain_part = message.get_body(preferencelist=("plain",))
+    assert plain_part is not None
+    assert "论文获取：正常，共 1 篇。" in plain_part.get_content()
+    attachments = list(message.iter_attachments())
+    assert len(attachments) == 1
+    assert attachments[0].get_content_type() == "text/markdown"
+    decoded_content = attachments[0].get_content()
     assert "E2E Paper 1" in decoded_content
     assert "E2E Paper 2" not in decoded_content
     assert enriched == ["E2E Paper 1"]
@@ -259,6 +266,8 @@ def test_run_no_papers_send_empty_false(config, monkeypatch):
 def test_run_no_papers_send_empty_true(config, monkeypatch):
     """When no papers are found and send_empty=true, empty email is sent."""
     import smtplib
+    from email import policy
+    from email.parser import Parser
 
     from omegaconf import open_dict
 
@@ -289,7 +298,11 @@ def test_run_no_papers_send_empty_true(config, monkeypatch):
 
     assert len(sent) == 1, "Email should be sent even with no papers when send_empty=true"
     _, _, body = sent[0]
-    assert "text/plain" in body
+    message = Parser(policy=policy.default).parsestr(body)
+    plain_part = message.get_body(preferencelist=("plain",))
+    assert plain_part is not None
+    assert "论文获取：正常，今日无新论文。" in plain_part.get_content()
+    assert "text/markdown" in body
 
 
 def test_save_markdown_uses_configured_output_directory(config, tmp_path):

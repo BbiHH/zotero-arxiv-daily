@@ -4,6 +4,7 @@ from datetime import datetime
 import tiktoken
 from openai import OpenAI
 from loguru import logger
+from omegaconf import OmegaConf
 import json
 from time import sleep
 RawPaperItem = TypeVar('RawPaperItem')
@@ -11,10 +12,19 @@ RawPaperItem = TypeVar('RawPaperItem')
 
 def _task_generation_kwargs(llm_params: dict, task: str) -> dict:
     """Merge shared model settings with task-specific output controls."""
-    base = dict(llm_params.get('generation_kwargs', {}) or {})
+    base = llm_params.get('generation_kwargs', {}) or {}
     task_config = llm_params.get(task, {}) or {}
-    overrides = dict(task_config.get('generation_kwargs', {}) or {})
-    return base | overrides
+    overrides = task_config.get('generation_kwargs', {}) or {}
+
+    # Hydra returns DictConfig/ListConfig objects. A shallow dict() conversion
+    # leaves nested OmegaConf containers in place, which the OpenAI client
+    # cannot JSON-serialize when constructing the request body.
+    if OmegaConf.is_config(base):
+        base = OmegaConf.to_container(base, resolve=True)
+    if OmegaConf.is_config(overrides):
+        overrides = OmegaConf.to_container(overrides, resolve=True)
+
+    return dict(base) | dict(overrides)
 
 
 def _task_retry_config(llm_params: dict, task: str) -> tuple[int, float]:

@@ -5,6 +5,7 @@ import math
 import smtplib
 from collections import Counter
 from email.header import Header
+from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import parseaddr, formataddr
 from loguru import logger
@@ -145,7 +146,12 @@ def get_local_date(config: DictConfig) -> datetime.date:
     timezone_name = config.executor.get("timezone") or "UTC"
     return datetime.datetime.now(ZoneInfo(timezone_name)).date()
 
-def send_email(config:DictConfig, content:str):
+def send_email(
+    config: DictConfig,
+    content: str,
+    paper_count: int | None = None,
+    diagnostics=None,
+):
     sender = config.email.sender
     receiver = config.email.receiver
     password = config.email.sender_password
@@ -155,13 +161,52 @@ def send_email(config:DictConfig, content:str):
         name, addr = parseaddr(s)
         return formataddr((Header(name, 'utf-8').encode(), addr))
 
-    # Markdown is sent as plain text so downstream LLMs receive a clean,
-    # deterministic representation without HTML layout noise.
-    msg = MIMEText(content, 'plain', 'utf-8')
+    # Keep the body intentionally minimal; the Markdown attachment remains the
+    # canonical readable digest.
+    msg = MIMEMultipart('mixed')
     msg['From'] = _format_addr('Github Action <%s>' % sender)
     msg['To'] = _format_addr('You <%s>' % receiver)
-    today = get_local_date(config).strftime('%Y/%m/%d')
-    msg['Subject'] = Header(f'Daily arXiv {today}', 'utf-8').encode()
+    local_date = get_local_date(config)
+    msg['Subject'] = Header(
+        f"Daily arXiv {local_date.strftime('%Y/%m/%d')}", 'utf-8'
+    ).encode()
+
+    has_diagnostics = diagnostics is not None and diagnostics.entries
+    if has_diagnostics and diagnostics.has_errors:
+        status_prefix = "存在异常"
+    elif has_diagnostics:
+        status_prefix = "完成但有警告"
+    else:
+        status_prefix = "正常"
+
+    if paper_count is None:
+        retrieval_status = f"{status_prefix}，结果请查看附件。"
+    elif paper_count == 0:
+        retrieval_status = f"{status_prefix}，今日无新论文。"
+    else:
+        retrieval_status = f"{status_prefix}，共 {paper_count} 篇。"
+    status_body = (
+        f"日期：{local_date.isoformat()}\n"
+        f"论文获取：{retrieval_status}\n"
+    )
+    if has_diagnostics:
+        diagnostic_lines = [
+            f"- [{level}] {message}" for level, message in diagnostics.entries
+        ]
+        if diagnostics.dropped_count:
+            diagnostic_lines.append(
+                f"- 另有 {diagnostics.dropped_count} 条诊断信息，请查看 GitHub Actions 日志。"
+            )
+        status_body += "\n异常信息：\n" + "\n".join(diagnostic_lines) + "\n"
+    msg.attach(MIMEText(status_body, 'plain', 'utf-8'))
+
+    markdown_attachment = MIMEText(content, 'markdown', 'utf-8')
+    markdown_attachment.add_header(
+        'Content-Disposition',
+        'attachment',
+        filename=f'daily-arxiv-{local_date.isoformat()}.md',
+    )
+    msg.attach(markdown_attachment)
 
     server = None
     try:
