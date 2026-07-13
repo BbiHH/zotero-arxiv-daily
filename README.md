@@ -98,6 +98,10 @@ source:
   arxiv:
     category: ["cs.AI","cs.CV","cs.LG","cs.CL"]
     include_cross_list: false # Set to true to include arXiv cross-list papers in these categories.
+    # Optional: override retry/timeout defaults for slow remote runners.
+    # network:
+    #   read_timeout: 120
+    #   max_attempts: 8
 
 executor:
   debug: ${oc.env:DEBUG,null}
@@ -106,6 +110,15 @@ executor:
 Set `source.arxiv.include_cross_list: true` if you want cross-listed papers included.
 >[!NOTE]
 > `${oc.env:XXX,yyy}` means the value of the environment variable `XXX`. If the variable is not set, the default value `yyy` will be used.
+
+arXiv RSS remains the source of the daily paper IDs. RSS, metadata API, and
+full-text downloads all use explicit connection/read timeouts and retry
+transient timeouts, connection failures, HTTP 408/429, and common 5xx responses
+inside the same Action run. Retries use capped exponential backoff and honor a
+numeric `Retry-After` header. If an API batch is incomplete, only the missing
+IDs are requested again; after retries are exhausted, successfully retrieved
+papers continue through the pipeline. The scheduled workflow has an explicit
+330-minute job limit, leaving margin below GitHub's six-hour hosted-runner cap.
 
 Here is the full configuration, `???` means the value must be filled in:
 ```yaml
@@ -120,6 +133,18 @@ source:
   arxiv:
     category: null # The categories of target arxiv papers. Find the abbr of your research area from [here](https://arxiv.org/category_taxonomy). Example: ["cs.AI","cs.CV","cs.LG","cs.CL"]
     include_cross_list: false # Whether to include arXiv cross-list papers in subscribed categories. Example: true
+    network:
+      connect_timeout: 15 # Connection timeout for RSS, API, and full-text downloads.
+      read_timeout: 120 # Read timeout for each request.
+      max_attempts: 8 # Attempts made inside one Action run for transient failures.
+      retry_base_delay: 15 # Initial exponential-backoff delay in seconds.
+      retry_max_delay: 300 # Maximum delay in seconds.
+      batch_size: 20 # arXiv API metadata batch size.
+      api_delay_seconds: 3 # Minimum interval between arXiv API requests.
+    extraction:
+      tar_timeout: 180 # Hard timeout per source-archive extraction.
+      html_timeout: 180 # Hard timeout per HTML extraction.
+      pdf_timeout: 180 # Hard timeout per PDF extraction.
   biorxiv:
     category: null # The categories of target biorxiv papers. Find categories from [here](https://www.biorxiv.org/). Example: ["biochemistry","animal behavior and cognition"]
   medrxiv:

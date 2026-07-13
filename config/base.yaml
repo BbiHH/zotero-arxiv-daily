@@ -9,6 +9,18 @@ source:
   arxiv:
     category: null # The categories of target arxiv papers. Find the abbr of your research area from [here](https://arxiv.org/category_taxonomy). Example: ["cs.AI","cs.CV","cs.LG","cs.CL"]
     include_cross_list: false # Whether to include arXiv cross-list papers in subscribed categories. Example: true
+    network:
+      connect_timeout: 15 # Seconds allowed to establish each RSS/API/download connection.
+      read_timeout: 120 # Seconds allowed without receiving response data.
+      max_attempts: 8 # Total attempts within the same workflow run for transient failures.
+      retry_base_delay: 15 # Initial retry delay in seconds; subsequent delays use exponential backoff.
+      retry_max_delay: 300 # Maximum retry delay in seconds. Numeric Retry-After headers take precedence up to this limit.
+      batch_size: 20 # Number of RSS paper IDs requested from the arXiv API together.
+      api_delay_seconds: 3 # Minimum delay enforced by arxiv.Client between API requests.
+    extraction:
+      tar_timeout: 180 # Hard per-paper timeout for source archive download and extraction.
+      html_timeout: 180 # Hard per-paper timeout for HTML download and extraction.
+      pdf_timeout: 180 # Hard per-paper timeout for PDF download and extraction.
   biorxiv:
     category: null # The categories of target biorxiv papers. Find categories from [here](https://www.biorxiv.org/). Example: ["biochemistry","animal behavior and cognition"]
   medrxiv:
